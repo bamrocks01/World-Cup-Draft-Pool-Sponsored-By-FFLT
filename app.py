@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="The 561 Torta Pounder World Cup Draft",
+    page_title="World Cup Draft Pool Sponsored By FFLT",
     page_icon="⚽",
     layout="wide",
 )
@@ -1142,7 +1142,7 @@ div[data-testid="stTabs"] button[role="tab"] {
 st.markdown(
     """
 <div class="hero">
-    <h1>The 561 Torta Pounder World Cup Draft ⚽️</h1>
+    <h1>The World Cup Draft Pool Sponsored By FFLT ⚽️</h1>
     <p>Live fantasy standings powered by football-data.org.</p>
 </div>
 """,
