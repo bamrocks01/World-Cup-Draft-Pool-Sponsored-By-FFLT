@@ -111,26 +111,19 @@ def score_match_for_team(match: dict, team: str) -> dict | None:
         opp_goals = away_goals if team == home else home_goals
 
         if team_goals > opp_goals:
-            points += 3
+            points = 3
             result = "W"
             record_delta["W"] = 1 if is_finished else 0
 
-            if team_goals - opp_goals >= 3:
-                bonus_3_plus = 1
-
-            if opp_goals == 0:
-                bonus_shutout = 1
-
         elif team_goals == opp_goals:
-            points += 1
+            points = 1
             result = "D"
             record_delta["D"] = 1 if is_finished else 0
 
         else:
+            points = 0
             result = "L"
             record_delta["L"] = 1 if is_finished else 0
-
-        points += bonus_3_plus + bonus_shutout
 
     opponent = away if team == home else home
 
@@ -159,71 +152,8 @@ def score_match_for_team(match: dict, team: str) -> dict | None:
 
 
 def compute_advancement_bonuses(matches: list[dict], drafted_teams: set[str]) -> dict[str, int]:
-    bonuses = {team: 0 for team in drafted_teams}
-    won_r32 = set()
-    won_qf = set()
-    won_sf = set()
-    won_final = set()
-    knockout_teams_seen = set()
-
-    for match in matches:
-        stage = (match.get("stage") or "").upper()
-
-        if "GROUP" in stage:
-            continue
-
-        home = normalize_team(match.get("homeTeam", {}).get("name"))
-        away = normalize_team(match.get("awayTeam", {}).get("name"))
-
-        for team in (home, away):
-            if team in drafted_teams:
-                knockout_teams_seen.add(team)
-
-        if match.get("status") not in {"FINISHED", "AWARDED"}:
-            continue
-
-        score = match.get("score", {}) or {}
-        winner = normalize_team(score.get("winner") or "")
-
-        if winner not in {home, away}:
-            full_time = score.get("fullTime") or {}
-            home_goals = full_time.get("home")
-            away_goals = full_time.get("away")
-
-            if home_goals is not None and away_goals is not None and home_goals != away_goals:
-                winner = home if home_goals > away_goals else away
-
-        if winner not in drafted_teams:
-            continue
-
-        if "LAST_32" in stage or "ROUND_OF_32" in stage:
-            won_r32.add(winner)
-        elif "QUARTER" in stage:
-            won_qf.add(winner)
-        elif "SEMI" in stage:
-            won_sf.add(winner)
-        elif "FINAL" in stage and "THIRD" not in stage:
-            won_final.add(winner)
-
-    for team in knockout_teams_seen:
-        bonuses[team] += 3
-
-    for team in won_r32:
-        bonuses[team] += 5
-
-    for team in won_qf:
-        bonuses[team] += 7
-
-    for team in won_sf:
-        bonuses[team] += 10
-
-    for team in won_final:
-        bonuses[team] += 15 + 25
-
-    for team, bonus in MANUAL_ADVANCEMENT_BONUSES.items():
-        bonuses[normalize_team(team)] = bonus
-
-    return bonuses
+    """This league uses match-result scoring only: win = 3, draw = 1, loss = 0."""
+    return {team: 0 for team in drafted_teams}
 
 
 def build_tables(matches: list[dict], draft_df: pd.DataFrame):
@@ -358,7 +288,6 @@ def pretty_owner_table(df):
             "owner": "Owner",
             "total_points": "Total",
             "match_points": "Match Pts",
-            "advancement_bonus": "Bonus",
             "record": "Record",
             "live_games": "Live",
         }
@@ -373,7 +302,6 @@ def pretty_team_table(df):
             "team": "Country",
             "total_points": "Total",
             "match_points": "Match Pts",
-            "advancement_bonus": "Bonus",
             "record": "Record",
             "live_games": "Live",
         }
@@ -494,27 +422,16 @@ def match_context(row: pd.Series) -> str:
 
 def scoring_lines(row: pd.Series) -> list[str]:
     """Return readable scoring components for one team/match row."""
-    lines = []
     result = row.get("result", "")
-    points = int(row.get("match_points", 0) or 0)
-    win_by_3 = int(row.get("win_by_3_bonus", 0) or 0)
-    shutout = int(row.get("shutout_win_bonus", 0) or 0)
 
     if result == "W":
-        lines.append("+3 Win")
-    elif result == "D":
-        lines.append("+1 Draw")
-    elif result == "L":
-        lines.append("+0 Loss")
-    elif points == 0:
-        lines.append("No fantasy points yet")
+        return ["+3 Win"]
+    if result == "D":
+        return ["+1 Draw"]
+    if result == "L":
+        return ["+0 Loss"]
 
-    if win_by_3:
-        lines.append("+1 Win by 3+ goals bonus")
-    if shutout:
-        lines.append("+1 Shutout win bonus")
-
-    return lines
+    return ["No fantasy points yet"]
 
 
 def match_title(row: pd.Series) -> str:
@@ -742,13 +659,12 @@ def next_match_text(country_matches: pd.DataFrame) -> str:
 
 
 def render_owner_summary_cards(owner_row: pd.Series):
-    summary_cols = st.columns(4)
     values = [
         ("Total Points", int(owner_row.get("total_points", 0))),
         ("Match Points", int(owner_row.get("match_points", 0))),
-        ("Bonus Points", int(owner_row.get("advancement_bonus", 0))),
         ("Record", owner_row.get("record", "0-0-0")),
     ]
+    summary_cols = st.columns(len(values))
 
     for col, (label, value) in zip(summary_cols, values):
         with col:
@@ -779,7 +695,7 @@ def render_country_breakdown_card(row: pd.Series, country_matches: pd.DataFrame)
         <div class="country-points">{int(row["total_points"])} pts</div>
     </div>
     <div class="country-meta">
-        Match Points: {int(row["match_points"])} &nbsp;•&nbsp; Advancement Bonus: {int(row["advancement_bonus"])}
+        Match Points: {int(row["match_points"])}
     </div>
 </div>
 """,
@@ -1190,7 +1106,7 @@ with tabs[0]:
     <div>
         <div class="rank-label">{medal}</div>
         <div class="owner-name">{row["owner"]}</div>
-        <div class="small-muted">Record: {row["record"]} • Match Pts: {int(row["match_points"])} • Bonus: {int(row["advancement_bonus"])}</div>
+        <div class="small-muted">Record: {row["record"]} • Match Pts: {int(row["match_points"])}</div>
     </div>
     <div class="total-points">{int(row["total_points"])} pts</div>
 </div>
@@ -1200,7 +1116,7 @@ with tabs[0]:
 
         with st.expander("Detailed Standings Table"):
             display = pretty_owner_table(owner_table)
-            wanted_cols = ["Owner", "Total", "Match Pts", "Bonus", "Record", "Live"]
+            wanted_cols = ["Owner", "Total", "Match Pts", "Record", "Live"]
             display = display[[c for c in wanted_cols if c in display.columns]]
             st.dataframe(display, use_container_width=True, hide_index=True)
 
@@ -1276,8 +1192,7 @@ with tabs[2]:
     <div class="country-points">{int(row["total_points"])} pts</div>
     <div class="country-meta">
         Record: {row["record"]}<br>
-        Match Points: {int(row["match_points"])}<br>
-        Advancement Bonus: {int(row["advancement_bonus"])}
+        Match Points: {int(row["match_points"])}
     </div>
 </div>
 """,
@@ -1286,7 +1201,7 @@ with tabs[2]:
 
     with st.expander("Detailed Team Table"):
         display = pretty_team_table(filtered)
-        wanted_cols = ["Owner", "Country", "Total", "Match Pts", "Bonus", "Record", "Live"]
+        wanted_cols = ["Owner", "Country", "Total", "Match Pts", "Record", "Live"]
         display = display[[c for c in wanted_cols if c in display.columns]]
         st.dataframe(display, use_container_width=True, hide_index=True)
 
@@ -1347,22 +1262,11 @@ with tabs[4]:
 
     st.markdown(
         """
-### Every Match
+### Match Scoring
 - **3 pts**: Win
 - **1 pt**: Draw
 - **0 pts**: Loss
-- **+1 bonus**: Win by 3+ goals
-- **+1 bonus**: Shutout win
 
-### Advancement Bonuses
-- **+3**: Survive group stage
-- **+5**: Win Round of 32
-- **+7**: Win Quarterfinal
-- **+10**: Win Semifinal
-- **+15**: Win the Final
-- **+25**: Win the Cup
-
-### Shootout Rule
-Shootouts count as a draw for match-result scoring, plus the applicable advancement bonus.
+The owner with the most total fantasy points at the end of the tournament wins the pool.
 """
     )
