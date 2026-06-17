@@ -32,6 +32,7 @@ TEAM_ALIASES = {
     "DR Congo": "Congo",
     "Congo DR": "Congo",
     "Cape Verde": "Cabo Verde",
+    "Cape Verde Islands": "Cape Verde",
     "Türkiye": "Turkey",
     "IR Iran": "Iran",
 }
